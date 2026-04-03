@@ -78,10 +78,12 @@ SOURCES = {
         "filename": "key_english.json",
     },
     # Strong's numbers linked to verses (scrollmapper)
+    # Optional — bootstrap.py skips gracefully if missing
     "strongs_verses": {
         "url": "https://raw.githubusercontent.com/scrollmapper/bible_databases/master/json/t_strongs.json",
         "description": "Strong's numbers linked to verses",
         "filename": "t_strongs.json",
+        "optional": True,
     },
 }
 
@@ -126,6 +128,8 @@ def main() -> None:
             downloaded += 1
         elif (RAW_DIR / source["filename"]).exists():
             skipped += 1
+        elif source.get("optional"):
+            print(f"  [skip] {name}: optional file unavailable, continuing")
         else:
             failed += 1
 

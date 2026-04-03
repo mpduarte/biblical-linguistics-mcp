@@ -8,7 +8,6 @@ build/
 .venv/
 venv/
 data/raw/
-data/biblical_linguistics.db
 tests/fixtures/test.db
 .pytest_cache/
 .mypy_cache/
