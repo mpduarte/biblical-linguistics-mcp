@@ -57,7 +57,22 @@ async def get_verse_text(book_number: int, chapter: int, verse: int) -> dict[str
 
 # --- Word / morphology queries ---
 
+async def _has_extended_data() -> bool:
+    """Whether load_stepbible.py has run: the tracked database stays without it."""
+    found = await _fetch_one(
+        "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'extended_lexemes'"
+    )
+    return found is not None
+
+
 async def get_words_for_verse(verse_id: int) -> list[dict[str, Any]]:
+    if not await _has_extended_data():
+        return await _fetch_all(
+            "SELECT w.*, l.transliteration, l.root_form, l.gloss, l.definition, l.frequency "
+            "FROM words w LEFT JOIN lexemes l ON w.strongs = l.strongs "
+            "WHERE w.verse_id = ? ORDER BY w.word_position",
+            (verse_id,),
+        )
     return await _fetch_all(
         "SELECT w.*, l.transliteration, l.root_form, l.gloss, l.definition, l.frequency, "
         "e.definition AS extended_definition "
@@ -92,6 +107,8 @@ async def count_words_by_strongs(strongs: str) -> int:
 
 async def get_extended_lexeme(strongs: str) -> dict[str, Any] | None:
     """A STEPBible extended Strong's entry, with how often the number occurs."""
+    if not await _has_extended_data():
+        return None
     return await _fetch_one(
         "SELECT e.*, (SELECT COUNT(*) FROM words w WHERE w.strongs_ext = e.strongs) AS frequency "
         "FROM extended_lexemes e WHERE e.strongs = ?",

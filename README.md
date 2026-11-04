@@ -159,6 +159,7 @@ All data is free and open-licensed:
 | Dataset | License | Use |
 |---------|---------|-----|
 | [Open Scriptures Hebrew Bible (OSHB)](https://github.com/openscriptures/morphhb) | CC BY 4.0 | Hebrew text + morphology |
+| [STEPBible Data](https://stepbible.github.io/STEPBible-Data) (TAHOT, TBESH), by Tyndale House and STEPBible.org | CC BY 4.0 | Extended Strong's numbers, senses, word-for-word English |
 | [Dodson Greek Lexicon](https://github.com/openscriptures/GreekLexicon) | CC BY-SA 3.0 | Greek lexical data |
 | [Open Scriptures Hebrew Lexicon](https://github.com/openscriptures/HebrewLexicon) | CC BY 4.0 | Hebrew lexical data |
 | Strong's Concordance | Public Domain | Numbering system, definitions |
