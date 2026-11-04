@@ -14,3 +14,8 @@ tests/fixtures/test.db
 *.sqlite
 *.sqlite3
 .env
+
+# Built by scripts/load_oshb.py and load_stepbible.py
+data/*.local.db*
+data/*.db-wal
+data/*.db-shm

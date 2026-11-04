@@ -128,3 +128,46 @@ class TestGreekMorphology:
         d = m.to_dict()
         assert d["tense"] == "present"
         assert "raw_code" in d
+
+
+class TestOshbCodes:
+    def test_prefixes_and_main_morpheme(self):
+        m = parse_hebrew_morphology("HC/Vqw3ms")
+        assert m.prefixes == ["conjunction"]
+        assert m.part_of_speech == "verb"
+        assert m.stem == "Qal"
+        assert m.aspect == "sequential_imperfect"
+
+    def test_preposition_with_article_prefix(self):
+        m = parse_hebrew_morphology("HRd/Ncbsa")
+        assert m.prefixes == ["preposition+definite_article"]
+        assert m.part_of_speech == "noun"
+        assert m.state == "absolute"
+
+    def test_pronominal_suffix(self):
+        m = parse_hebrew_morphology("HNcmsc/Sp3ms")
+        assert m.state == "construct"
+        assert m.suffix_type == "pronominal"
+        assert m.suffix_person == "3rd"
+        assert m.suffix_gender == "masculine"
+        assert m.suffix_number == "singular"
+
+    def test_preposition_with_suffix_only(self):
+        m = parse_hebrew_morphology("HR/Sp2fs")
+        assert m.part_of_speech == "preposition"
+        assert m.prefixes == []
+        assert m.suffix_person == "2nd"
+
+    def test_particle_type(self):
+        assert parse_hebrew_morphology("HTo").subtype == "direct_object_marker"
+
+    def test_x_is_no_value(self):
+        m = parse_hebrew_morphology("HPdxms")
+        assert m.subtype == "demonstrative"
+        assert m.person == ""
+        assert m.gender == "masculine"
+
+    def test_aramaic_stems_differ(self):
+        m = parse_hebrew_morphology("AVhp3ms")
+        assert m.language == "Aramaic"
+        assert m.stem == "Haphel"

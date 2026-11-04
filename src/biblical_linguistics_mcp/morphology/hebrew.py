@@ -10,6 +10,7 @@ Examples:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 # Part of speech codes (OSHB)
 POS_CODES = {
@@ -125,11 +126,69 @@ STATE_CODES = {
 }
 
 
+# Particle types
+PARTICLE_TYPE = {
+    "a": "affirmation",
+    "d": "definite_article",
+    "e": "exhortation",
+    "i": "interrogative",
+    "j": "interjection",
+    "m": "demonstrative",
+    "n": "negative",
+    "o": "direct_object_marker",
+    "r": "relative",
+}
+
+# Preposition type: only "d", an inseparable preposition pointed for the article
+PREPOSITION_TYPE = {
+    "d": "definite_article",
+}
+
+# Suffix types
+SUFFIX_TYPE = {
+    "d": "directional_he",
+    "h": "paragogic_he",
+    "n": "paragogic_nun",
+    "p": "pronominal",
+}
+
+# Aramaic verb stems: the same letters name different stems in Aramaic
+ARAMAIC_STEM_CODES = {
+    "q": "Peal",
+    "Q": "Peil",
+    "u": "Hithpeel",
+    "p": "Pael",
+    "P": "Ithpaal",
+    "M": "Hithpaal",
+    "a": "Aphel",
+    "h": "Haphel",
+    "s": "Saphel",
+    "e": "Shaphel",
+    "H": "Hophal",
+    "i": "Ithpeel",
+    "t": "Hishtaphel",
+    "v": "Ishtaphel",
+    "w": "Hithaphel",
+    "o": "Polel",
+    "z": "Ithpoel",
+    "r": "Hithpolel",
+    "f": "Hithpalpel",
+    "b": "Hephal",
+    "c": "Tiphel",
+    "m": "Poel",
+    "l": "Palpel",
+    "L": "Ithpalpel",
+    "O": "Ithpolel",
+    "G": "Ittaphal",
+}
+
+
 @dataclass
 class HebrewMorphology:
     """Parsed Hebrew morphological data."""
 
     raw_code: str
+    language: str = ""
     part_of_speech: str = ""
     subtype: str = ""
     stem: str = ""
@@ -138,16 +197,18 @@ class HebrewMorphology:
     gender: str = ""
     number: str = ""
     state: str = ""
+    prefixes: list[str] = field(default_factory=list)
+    suffix_type: str = ""
     suffix_person: str = ""
     suffix_gender: str = ""
     suffix_number: str = ""
 
-    def to_dict(self) -> dict[str, str]:
-        d: dict[str, str] = {"raw_code": self.raw_code}
+    def to_dict(self) -> dict[str, Any]:
+        d: dict[str, Any] = {"raw_code": self.raw_code}
         for fld in [
-            "part_of_speech", "subtype", "stem", "aspect", "person",
-            "gender", "number", "state", "suffix_person", "suffix_gender",
-            "suffix_number",
+            "language", "part_of_speech", "subtype", "stem", "aspect", "person",
+            "gender", "number", "state", "prefixes", "suffix_type",
+            "suffix_person", "suffix_gender", "suffix_number",
         ]:
             val = getattr(self, fld)
             if val:
@@ -155,30 +216,51 @@ class HebrewMorphology:
         return d
 
 
-def parse_hebrew_morphology(code: str) -> HebrewMorphology:
-    """Parse an OSHB-style Hebrew morphology code.
+def _value(table: dict[str, str], char: str) -> str:
+    """Look a code up; 'x' is OSHB's placeholder for no value."""
+    return "" if char == "x" else table.get(char, char)
 
-    The code format varies by part of speech. General pattern:
-    H[POS][type/stem][aspect][person][gender][number][state]
-    Prefix 'H' indicates Hebrew.
+
+def _prefix_name(segment: str) -> str:
+    """Name a morpheme written before the word's main morpheme."""
+    pos = POS_CODES.get(segment[0], segment[0])
+    if segment[0] == "T" and len(segment) > 1:
+        return _value(PARTICLE_TYPE, segment[1])
+    if segment[0] == "R" and len(segment) > 1:
+        return f"{pos}+{_value(PREPOSITION_TYPE, segment[1])}"
+    return pos
+
+
+def parse_hebrew_morphology(code: str) -> HebrewMorphology:
+    """Parse an OSHB morphology code.
+
+    A code is a language letter (H or A) and morphemes joined by "/": any
+    prefixes, the main morpheme, then any suffix, as in "HC/Vqw3ms" or
+    "HNcmsc/Sp3ms". The fields describe the main morpheme.
     """
     result = HebrewMorphology(raw_code=code)
 
     if not code:
         return result
 
-    # Strip language prefix
-    pos_start = 0
+    body = code
     if code[0] in ("H", "A"):  # H=Hebrew, A=Aramaic
-        pos_start = 1
+        result.language = "Hebrew" if code[0] == "H" else "Aramaic"
+        body = code[1:]
 
-    if pos_start >= len(code):
+    segments = [s for s in body.split("/") if s]
+    if not segments:
         return result
 
-    pos_char = code[pos_start]
-    result.part_of_speech = POS_CODES.get(pos_char, pos_char)
+    if len(segments) > 1 and segments[-1][0] == "S":
+        _parse_suffix_morpheme(segments.pop()[1:], result)
 
-    remaining = code[pos_start + 1:]
+    result.prefixes = [_prefix_name(s) for s in segments[:-1]]
+    main = segments[-1]
+
+    pos_char = main[0]
+    result.part_of_speech = POS_CODES.get(pos_char, pos_char)
+    remaining = main[1:]
 
     if pos_char == "V":
         _parse_hebrew_verb(remaining, result)
@@ -188,118 +270,94 @@ def parse_hebrew_morphology(code: str) -> HebrewMorphology:
         _parse_hebrew_adjective(remaining, result)
     elif pos_char == "P":
         _parse_hebrew_pronoun(remaining, result)
-    elif pos_char in ("R", "C", "D", "T", "S"):
-        _parse_hebrew_particle(remaining, result)
+    elif pos_char == "T" and remaining:
+        result.subtype = _value(PARTICLE_TYPE, remaining[0])
+    elif pos_char == "R" and remaining:
+        result.subtype = _value(PREPOSITION_TYPE, remaining[0])
+    elif pos_char == "S":
+        _parse_suffix_morpheme(remaining, result)
 
     return result
 
 
 def _parse_hebrew_verb(code: str, result: HebrewMorphology) -> None:
-    """Parse verb morphology: stem, aspect, person, gender, number."""
+    """Parse verb morphology: stem, aspect, person, gender, number, state."""
+    stems = ARAMAIC_STEM_CODES if result.language == "Aramaic" else STEM_CODES
     idx = 0
     if idx < len(code):
-        result.stem = STEM_CODES.get(code[idx], code[idx])
+        result.stem = _value(stems, code[idx])
         idx += 1
     if idx < len(code):
-        result.aspect = ASPECT_CODES.get(code[idx], code[idx])
+        result.aspect = _value(ASPECT_CODES, code[idx])
         idx += 1
     # Participles and infinitives don't have person
-    if idx < len(code) and code[idx] in PERSON_CODES:
-        result.person = PERSON_CODES.get(code[idx], code[idx])
+    if idx < len(code) and (code[idx] in PERSON_CODES or code[idx] == "x"):
+        result.person = _value(PERSON_CODES, code[idx])
         idx += 1
     if idx < len(code):
-        result.gender = GENDER_CODES.get(code[idx], code[idx])
+        result.gender = _value(GENDER_CODES, code[idx])
         idx += 1
     if idx < len(code):
-        result.number = NUMBER_CODES.get(code[idx], code[idx])
+        result.number = _value(NUMBER_CODES, code[idx])
         idx += 1
     # Optional state for participles
-    if idx < len(code) and code[idx] in STATE_CODES:
-        result.state = STATE_CODES.get(code[idx], code[idx])
-        idx += 1
-    # Pronominal suffix
     if idx < len(code):
-        _parse_suffix(code[idx:], result)
+        result.state = _value(STATE_CODES, code[idx])
 
 
 def _parse_hebrew_noun(code: str, result: HebrewMorphology) -> None:
     """Parse noun morphology: type, gender, number, state."""
-    idx = 0
-    if idx < len(code):
-        result.subtype = NOUN_TYPE.get(code[idx], code[idx])
-        idx += 1
-    if idx < len(code):
-        result.gender = GENDER_CODES.get(code[idx], code[idx])
-        idx += 1
-    if idx < len(code):
-        result.number = NUMBER_CODES.get(code[idx], code[idx])
-        idx += 1
-    if idx < len(code) and code[idx] in STATE_CODES:
-        result.state = STATE_CODES.get(code[idx], code[idx])
-        idx += 1
-    if idx < len(code):
-        _parse_suffix(code[idx:], result)
+    if len(code) > 0:
+        result.subtype = _value(NOUN_TYPE, code[0])
+    if len(code) > 1:
+        result.gender = _value(GENDER_CODES, code[1])
+    if len(code) > 2:
+        result.number = _value(NUMBER_CODES, code[2])
+    if len(code) > 3:
+        result.state = _value(STATE_CODES, code[3])
 
 
 def _parse_hebrew_adjective(code: str, result: HebrewMorphology) -> None:
     """Parse adjective morphology: type, gender, number, state."""
-    idx = 0
-    if idx < len(code):
-        result.subtype = ADJ_TYPE.get(code[idx], code[idx])
-        idx += 1
-    if idx < len(code):
-        result.gender = GENDER_CODES.get(code[idx], code[idx])
-        idx += 1
-    if idx < len(code):
-        result.number = NUMBER_CODES.get(code[idx], code[idx])
-        idx += 1
-    if idx < len(code) and code[idx] in STATE_CODES:
-        result.state = STATE_CODES.get(code[idx], code[idx])
-        idx += 1
+    if len(code) > 0:
+        result.subtype = _value(ADJ_TYPE, code[0])
+    if len(code) > 1:
+        result.gender = _value(GENDER_CODES, code[1])
+    if len(code) > 2:
+        result.number = _value(NUMBER_CODES, code[2])
+    if len(code) > 3:
+        result.state = _value(STATE_CODES, code[3])
 
 
 def _parse_hebrew_pronoun(code: str, result: HebrewMorphology) -> None:
     """Parse pronoun morphology: type, person, gender, number."""
-    idx = 0
-    if idx < len(code):
-        result.subtype = PRONOUN_TYPE.get(code[idx], code[idx])
-        idx += 1
-    if idx < len(code) and code[idx] in PERSON_CODES:
-        result.person = PERSON_CODES.get(code[idx], code[idx])
-        idx += 1
-    if idx < len(code):
-        result.gender = GENDER_CODES.get(code[idx], code[idx])
-        idx += 1
-    if idx < len(code):
-        result.number = NUMBER_CODES.get(code[idx], code[idx])
-        idx += 1
+    if len(code) > 0:
+        result.subtype = _value(PRONOUN_TYPE, code[0])
+    if len(code) > 1:
+        result.person = _value(PERSON_CODES, code[1])
+    if len(code) > 2:
+        result.gender = _value(GENDER_CODES, code[2])
+    if len(code) > 3:
+        result.number = _value(NUMBER_CODES, code[3])
 
 
-def _parse_hebrew_particle(code: str, result: HebrewMorphology) -> None:
-    """Parse particle/preposition/conjunction morphology."""
-    # These are usually just the POS, sometimes with a suffix
-    if code:
-        _parse_suffix(code, result)
-
-
-def _parse_suffix(code: str, result: HebrewMorphology) -> None:
-    """Parse pronominal suffix: person, gender, number."""
-    idx = 0
-    if idx < len(code) and code[idx] in PERSON_CODES:
-        result.suffix_person = PERSON_CODES.get(code[idx], code[idx])
-        idx += 1
-    if idx < len(code):
-        result.suffix_gender = GENDER_CODES.get(code[idx], code[idx])
-        idx += 1
-    if idx < len(code):
-        result.suffix_number = NUMBER_CODES.get(code[idx], code[idx])
-        idx += 1
+def _parse_suffix_morpheme(code: str, result: HebrewMorphology) -> None:
+    """Parse a suffix morpheme: type, then person, gender, number."""
+    if len(code) > 0:
+        result.suffix_type = _value(SUFFIX_TYPE, code[0])
+    if len(code) > 1:
+        result.suffix_person = _value(PERSON_CODES, code[1])
+    if len(code) > 2:
+        result.suffix_gender = _value(GENDER_CODES, code[2])
+    if len(code) > 3:
+        result.suffix_number = _value(NUMBER_CODES, code[3])
 
 
 # Morphology code reference table
 MORPHOLOGY_REFERENCE = {
     "parts_of_speech": POS_CODES,
     "stems": STEM_CODES,
+    "aramaic_stems": ARAMAIC_STEM_CODES,
     "aspects": ASPECT_CODES,
     "persons": PERSON_CODES,
     "genders": GENDER_CODES,
@@ -308,4 +366,7 @@ MORPHOLOGY_REFERENCE = {
     "noun_types": NOUN_TYPE,
     "pronoun_types": PRONOUN_TYPE,
     "adjective_types": ADJ_TYPE,
+    "particle_types": PARTICLE_TYPE,
+    "preposition_types": PREPOSITION_TYPE,
+    "suffix_types": SUFFIX_TYPE,
 }
