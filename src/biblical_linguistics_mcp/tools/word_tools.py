@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from ..db import queries
 from ..lexicon import hebrew as hebrew_lex, greek as greek_lex
 from ..morphology.hebrew import parse_hebrew_morphology
@@ -25,16 +27,23 @@ async def parse_verse(reference: str) -> dict:
         morph_code = w.get("morphology_code", "") or ""
         # Determine language from Strong's number
         strongs = w.get("strongs", "") or ""
-        if strongs.startswith("H"):
-            morph = parse_hebrew_morphology(morph_code).to_dict()
-        elif strongs.startswith("G"):
+        if strongs.startswith("G"):
             morph = parse_greek_morphology(morph_code).to_dict()
+        elif strongs.startswith("H") or morph_code[:1] in ("H", "A"):
+            # A preposition written as a prefix has a code but no Strong's number
+            morph = parse_hebrew_morphology(morph_code).to_dict()
         else:
             morph = {"raw_code": morph_code}
 
         parsed_words.append({
             "position": w["word_position"],
             "text": w["text_original"],
+            "qere": w.get("qere") or "",
+            "extended_strongs": w.get("strongs_ext") or "",
+            "sense": w.get("sense") or "",
+            "translation": w.get("translation") or "",
+            "extended_definition": w.get("extended_definition") or "",
+            "wlc_reference": w.get("wlc_ref") or "",
             "strongs": strongs,
             "transliteration": w.get("transliteration", ""),
             "root_form": w.get("root_form", ""),
@@ -61,6 +70,15 @@ async def lookup_word(strongs: str, include_occurrences: bool = False) -> dict:
     """Full lexical entry by Strong's number."""
     strongs = strongs.upper().strip()
 
+    extended = re.fullmatch(r"H(\d{1,4})([A-Z])", strongs)
+    if extended:
+        # An extended number names one BDB entry, as H7462B and H7462C do
+        tag = f"H{extended.group(1).zfill(4)}{extended.group(2)}"
+        entry = await queries.get_extended_lexeme(tag)
+        if not entry:
+            return {"error": f"Lexeme not found: {tag}"}
+        return {**entry, "language": "Hebrew", "source": "STEPBible TBESH"}
+
     if strongs.startswith("H"):
         entry = await hebrew_lex.get_hebrew_entry(strongs)
     elif strongs.startswith("G"):
@@ -69,6 +87,14 @@ async def lookup_word(strongs: str, include_occurrences: bool = False) -> dict:
         return {"error": f"Invalid Strong's number format: {strongs}. Must start with H or G."}
 
     if not entry:
+        # STEPBible numbers prefixes and particles from H9001; Strong's has none
+        plain = re.fullmatch(r"H(\d{1,4})", strongs)
+        if plain:
+            extended_entry = await queries.get_extended_lexeme(f"H{plain.group(1).zfill(4)}")
+            if extended_entry:
+                # The count covers a word's root only, so it says nothing for a prefix
+                extended_entry.pop("frequency", None)
+                return {**extended_entry, "language": "Hebrew", "source": "STEPBible TBESH"}
         return {"error": f"Lexeme not found: {strongs}"}
 
     result = {

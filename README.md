@@ -142,6 +142,16 @@ async with sse_client("http://localhost:8080/sse") as (read, write):
 | `trace_theme` | Trace theme across both testaments | `topic` (required) |
 | `lxx_quotation_analysis` | Analyze NT quotation of OT via LXX | `nt_reference`, `ot_reference` |
 
+## Hebrew Morphology
+
+`python scripts/load_oshb.py` loads every Old Testament word from the Open Scriptures Hebrew Bible (pinned commit; morphology CC BY 4.0, WLC public domain). It writes `data/biblical_linguistics.local.db`, a gitignored copy of the tracked database, which stays as upstream ships it. Start the server with `--db data/biblical_linguistics.local.db`, or set `BIBLICAL_LINGUISTICS_DB`, which both load scripts also honour.
+
+- References use KJV numbering. Each word's `wlc_reference` gives its WLC verse, so a Psalm title appears inside verse 1.
+- `text` is the written form (ketiv). `qere` is the word as read, where they differ. A word read but not written has `text` equal to `qere` and is left out of `text_original`.
+- A word's Strong's number is its main morpheme's. A preposition written as a prefix with only a suffix after it (`לוֹ`) has none.
+
+`python scripts/load_stepbible.py`, run after that, adds STEPBible's extended Strong's numbers (Tyndale House and STEPBible.org, CC BY 4.0, [source](https://stepbible.github.io/STEPBible-Data)). `parse_verse` gives each word's `extended_strongs`, `sense`, `translation` and `extended_definition`, and `lookup_word` takes one of these numbers, such as `H7462C`.
+
 ## Data Sources & Licensing
 
 All data is free and open-licensed:

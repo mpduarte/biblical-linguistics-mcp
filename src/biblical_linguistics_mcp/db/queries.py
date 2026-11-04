@@ -59,8 +59,10 @@ async def get_verse_text(book_number: int, chapter: int, verse: int) -> dict[str
 
 async def get_words_for_verse(verse_id: int) -> list[dict[str, Any]]:
     return await _fetch_all(
-        "SELECT w.*, l.transliteration, l.root_form, l.gloss, l.definition, l.frequency "
+        "SELECT w.*, l.transliteration, l.root_form, l.gloss, l.definition, l.frequency, "
+        "e.definition AS extended_definition "
         "FROM words w LEFT JOIN lexemes l ON w.strongs = l.strongs "
+        "LEFT JOIN extended_lexemes e ON w.strongs_ext = e.strongs "
         "WHERE w.verse_id = ? ORDER BY w.word_position",
         (verse_id,),
     )
@@ -87,6 +89,15 @@ async def count_words_by_strongs(strongs: str) -> int:
 
 
 # --- Lexicon queries ---
+
+async def get_extended_lexeme(strongs: str) -> dict[str, Any] | None:
+    """A STEPBible extended Strong's entry, with how often the number occurs."""
+    return await _fetch_one(
+        "SELECT e.*, (SELECT COUNT(*) FROM words w WHERE w.strongs_ext = e.strongs) AS frequency "
+        "FROM extended_lexemes e WHERE e.strongs = ?",
+        (strongs,),
+    )
+
 
 async def get_lexeme(strongs: str) -> dict[str, Any] | None:
     return await _fetch_one("SELECT * FROM lexemes WHERE strongs = ?", (strongs,))

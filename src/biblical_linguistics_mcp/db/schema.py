@@ -38,6 +38,15 @@ CREATE TABLE IF NOT EXISTS lexemes (
 );
 
 -- Individual word occurrences with morphology
+CREATE TABLE IF NOT EXISTS extended_lexemes (
+    strongs TEXT PRIMARY KEY,
+    word TEXT,
+    transliteration TEXT,
+    morphology TEXT,
+    gloss TEXT,
+    definition TEXT
+);
+
 CREATE TABLE IF NOT EXISTS words (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     verse_id INTEGER NOT NULL,
@@ -63,6 +72,12 @@ CREATE TABLE IF NOT EXISTS words (
     suffix_person TEXT,
     suffix_number TEXT,
     suffix_gender TEXT,
+    qere TEXT,                       -- the word as read, where it differs from the written text
+    wlc_ref TEXT,                    -- the WLC verse, whose numbering can differ from the KJV's
+    strongs_ext TEXT,                -- STEPBible extended Strong's, one per BDB entry
+    strongs_tags TEXT,               -- every morpheme's tag, as TAHOT writes them
+    sense TEXT,                      -- that entry's short meaning
+    translation TEXT,                -- TAHOT's word-for-word English
     FOREIGN KEY (verse_id) REFERENCES verses(id),
     FOREIGN KEY (strongs) REFERENCES lexemes(strongs)
 );
